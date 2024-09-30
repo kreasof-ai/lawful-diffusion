@@ -30,3 +30,8 @@ A **training pipeline** that allows a generative model like **Stable Diffusion**
 ![Architecture Diagram](flowchart.png)
 
 ---
+
+## Future updates
+
+- Experimental implementation with [WikiArt Public dataset](https://huggingface.co/datasets/huggan/wikiart)
+- [FLUX.1-schnell](https://huggingface.co/black-forest-labs/FLUX.1-schnell) implementation rather than stable diffusion
