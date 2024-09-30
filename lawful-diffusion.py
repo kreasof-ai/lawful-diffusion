@@ -11,6 +11,9 @@ from torch.utils.data import Dataset, DataLoader
 from sklearn.preprocessing import LabelEncoder
 import pickle
 import numpy as np
+from datasets import load_dataset
+from safetensors.torch import save_file
+from huggingface_hub import HfApi, upload_folder
 
 # Device configuration
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -34,7 +37,7 @@ clip_model.eval()
 
 # 2. Define Transformation for VAE
 vae_transform = Compose([
-    Resize(512, interpolation=Image.BICUBIC),  # Adjust based on your model
+    Resize(512, interpolation=Image.BICUBIC),
     CenterCrop(512),
     ToTensor(),
     Normalize([0.5], [0.5])
@@ -61,35 +64,23 @@ def get_combined_embedding(image, clip_processor, clip_model, vae, vae_transform
     combined_emb = np.concatenate([clip_emb, vae_emb], axis=1)
     return combined_emb
 
-# 4. Define Custom Dataset
+# 4. Define Custom Dataset using Hugging Face datasets
 class ArtistDataset(Dataset):
-    def __init__(self, dataset_path, clip_processor, clip_model, vae, vae_transform, label_encoder, transform=None):
-        self.dataset_path = dataset_path
-        self.artists = [artist for artist in os.listdir(dataset_path) if os.path.isdir(os.path.join(dataset_path, artist))]
-        self.data = []
-        for artist in self.artists:
-            artist_path = os.path.join(dataset_path, artist)
-            for img_file in os.listdir(artist_path):
-                img_path = os.path.join(artist_path, img_file)
-                self.data.append((img_path, artist))
+    def __init__(self, dataset_name, split, clip_processor, clip_model, vae, vae_transform, label_encoder):
+        self.dataset = load_dataset(dataset_name, split=split)
         self.clip_processor = clip_processor
         self.clip_model = clip_model
         self.vae = vae
         self.vae_transform = vae_transform
         self.label_encoder = label_encoder
-        self.transform = transform
 
     def __len__(self):
-        return len(self.data)
+        return len(self.dataset)
 
     def __getitem__(self, idx):
-        img_path, artist = self.data[idx]
-        try:
-            image = Image.open(img_path).convert("RGB")
-        except Exception as e:
-            print(f"Error loading image {img_path}: {e}")
-            # Handle corrupted images as needed
-            return None
+        item = self.dataset[idx]
+        image = item['image']
+        artist = item['artist']
 
         # Get combined embedding
         combined_emb = get_combined_embedding(image, self.clip_processor, self.clip_model, self.vae, self.vae_transform, device)
@@ -100,10 +91,11 @@ class ArtistDataset(Dataset):
         return torch.tensor(combined_emb, dtype=torch.float32), torch.tensor(label, dtype=torch.long)
 
 # 5. Initialize Label Encoder and Save
-dataset_path = "path_to_your_dataset"  # Replace with your dataset path
+dataset_name = "your_dataset_name"  # Replace with your Hugging Face dataset name
+dataset = load_dataset(dataset_name)
 
 # Gather artist names
-artist_names = [artist for artist in os.listdir(dataset_path) if os.path.isdir(os.path.join(dataset_path, artist))]
+artist_names = dataset['train'].unique('artist')
 
 # Initialize and fit LabelEncoder
 label_encoder = LabelEncoder()
@@ -115,10 +107,11 @@ with open("label_encoder.pkl", "wb") as f:
 
 # 6. Create Dataset and DataLoader
 batch_size = 32
-num_workers = 4  # Adjust based on your system
+num_workers = 4
 
-dataset = ArtistDataset(
-    dataset_path=dataset_path,
+train_dataset = ArtistDataset(
+    dataset_name=dataset_name,
+    split='train',
     clip_processor=clip_processor,
     clip_model=clip_model,
     vae=vae,
@@ -126,19 +119,8 @@ dataset = ArtistDataset(
     label_encoder=label_encoder
 )
 
-# Filter out None samples (if any)
-filtered_data = [sample for sample in dataset if sample is not None]
-combined_features, labels = zip(*filtered_data)
-
-combined_features = torch.stack(combined_features)
-labels = torch.stack(labels)
-
-# Create a new dataset from the filtered data
-filtered_dataset = torch.utils.data.TensorDataset(combined_features, labels)
-
-# DataLoader
-dataloader = DataLoader(
-    filtered_dataset,
+train_dataloader = DataLoader(
+    train_dataset,
     batch_size=batch_size,
     shuffle=True,
     num_workers=num_workers
@@ -163,8 +145,8 @@ class ArtistClassifier(nn.Module):
 
 # Determine input dimensions
 clip_dim = 512
-vae_dim = 512  # Adjust based on actual VAE configuration
-input_dim = clip_dim + vae_dim  # 1024
+vae_dim = 512
+input_dim = clip_dim + vae_dim
 
 num_classes = len(artist_names)
 
@@ -180,7 +162,7 @@ num_epochs = 10
 for epoch in range(num_epochs):
     model.train()
     total_loss = 0
-    for batch in dataloader:
+    for batch in train_dataloader:
         inputs, labels = batch
         inputs = inputs.to(device)
         labels = labels.to(device)
@@ -196,21 +178,42 @@ for epoch in range(num_epochs):
 
         total_loss += loss.item()
 
-    avg_loss = total_loss / len(dataloader)
+    avg_loss = total_loss / len(train_dataloader)
     print(f"Epoch [{epoch+1}/{num_epochs}], Loss: {avg_loss:.4f}")
 
-    # Optional: Validation can be added here
+# 10. Save the Trained Model using safetensors
+save_file(model.state_dict(), "artist_classifier.safetensors")
+print("Model saved to artist_classifier.safetensors")
 
-# 10. Save the Trained Model
-torch.save(model.state_dict(), "artist_classifier.pth")
-print("Model saved to artist_classifier.pth")
+# 11. Upload the model to Hugging Face Hub
+api = HfApi()
+repo_id = "your-username/your-model-name"  # Replace with your desired repository name
 
-# 11. Load the Trained Model (for inference)
+# Create the repository if it doesn't exist
+api.create_repo(repo_id, exist_ok=True)
+
+# Upload the model file
+api.upload_file(
+    path_or_fileobj="artist_classifier.safetensors",
+    path_in_repo="artist_classifier.safetensors",
+    repo_id=repo_id,
+)
+
+# Upload the label encoder
+api.upload_file(
+    path_or_fileobj="label_encoder.pkl",
+    path_in_repo="label_encoder.pkl",
+    repo_id=repo_id,
+)
+
+print(f"Model and label encoder uploaded to {repo_id}")
+
+# 12. Load the Trained Model (for inference)
 model = ArtistClassifier(input_dim=input_dim, num_classes=num_classes).to(device)
-model.load_state_dict(torch.load("artist_classifier.pth"))
+model.load_state_dict(torch.load("artist_classifier.safetensors"))
 model.eval()
 
-# 12. Define Inference Functions
+# 13. Define Inference Functions
 def generate_image_with_artist_reference(prompt, sd_pipeline, model, clip_processor, clip_model, vae, vae_transform, label_encoder, device, top_k=3):
     # Generate Image
     with torch.autocast(device.type):
@@ -269,7 +272,7 @@ def verify_external_image_enhanced(image_path, model, clip_processor, clip_model
 
     return verification_report
 
-# 13. Example Usage
+# 14. Example Usage
 if __name__ == "__main__":
     # Example Prompt
     prompt = "A futuristic cityscape at sunset"
