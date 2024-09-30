@@ -1,3 +1,7 @@
+![hero](github.webp)
+
+---
+
 # Lawful Diffusion
 
 This implementation provides a comprehensive framework for integrating **Stable Diffusion** with a **retrieval-based attribution system** using **PyTorch**, **Hugging Face's Diffusers**, and **CLIP**. By encoding and indexing the training dataset's images, the system can both attribute generated images and verify external images against the training data.
