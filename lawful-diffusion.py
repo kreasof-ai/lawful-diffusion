@@ -91,7 +91,7 @@ class ArtistDataset(Dataset):
         return torch.tensor(combined_emb, dtype=torch.float32), torch.tensor(label, dtype=torch.long)
 
 # 5. Initialize Label Encoder and Save
-dataset_name = "your_dataset_name"  # Replace with your Hugging Face dataset name
+dataset_name = "your_username/your_dataset_name"  # Replace with your Hugging Face dataset name
 dataset = load_dataset(dataset_name)
 
 # Gather artist names
