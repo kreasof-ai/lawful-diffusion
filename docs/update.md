@@ -1,3 +1,33 @@
+To update your implementation of Lawful Diffusion by fine-tuning both the generative text-to-image model (Stable Diffusion) and the classifier head, you'll need to extend your current setup to include the fine-tuning process for Stable Diffusion alongside the classifier training. Here's a comprehensive guide and updated code to achieve this.
+
+### **Key Steps to Implement Fine-Tuning for Both Models:**
+
+1. **Prepare the Dataset:**
+   - Ensure your dataset includes paired text prompts and images. If not, you might need to generate or associate text prompts with images.
+   
+2. **Modify the Dataset Class:**
+   - Adjust the `ArtistDataset` to return both text prompts and images.
+
+3. **Set Up Optimizers:**
+   - Define separate optimizers for the Stable Diffusion components and the classifier head.
+
+4. **Define Training Loops:**
+   - Implement simultaneous training for both the generative model and the classifier.
+   - Compute separate loss functions for image generation and classification, then combine them.
+
+5. **Manage Computational Resources:**
+   - Fine-tuning Stable Diffusion is resource-intensive. Ensure you have adequate GPU memory.
+   - Consider using techniques like **gradient checkpointing** or **mixed-precision training** to optimize resource usage.
+
+6. **Save and Upload Both Models:**
+   - After training, save both the fine-tuned Stable Diffusion model and the classifier head.
+   - Upload them to Hugging Face Hub as needed.
+
+### **Updated Code Implementation:**
+
+Below is the updated code incorporating the fine-tuning of both the Stable Diffusion model and the classifier head. Please read through the comments for clarity.
+
+```python
 import os
 import torch
 from diffusers import StableDiffusionPipeline, UNet2DConditionModel, AutoencoderKL, CLIPTextModel, CLIPTokenizer
@@ -434,3 +464,63 @@ if __name__ == "__main__":
             print(f"{idx}. Artist: {report['artist']}, Probability: {report['probability']:.2f}")
     else:
         print("\nNo similar images found or error in processing.")
+```
+
+### **Detailed Explanation of the Updates:**
+
+1. **Dataset Preparation:**
+   - **Text Prompts:** The `ArtistDataset` class now includes text prompts. If your dataset doesn't have a 'text' field, it defaults to "Artwork by [artist]". Ensure your dataset includes meaningful prompts for better fine-tuning.
+   - **Data Returned:** The dataset returns `input_ids`, `attention_mask` for the text encoder, `pixel_values` for the image, `labels` for diffusion training, and `combined_emb` along with the classification `label`.
+
+2. **Model Components for Fine-Tuning:**
+   - **Stable Diffusion Components:** Extracted `vae`, `text_encoder`, `tokenizer`, and `unet` from the `StableDiffusionPipeline` for separate fine-tuning.
+   - **Set to Train Mode:** Ensured that `vae`, `text_encoder`, and `unet` are in training mode.
+
+3. **Classification Model:**
+   - Remains the same, but ensure that the input dimensions (`input_dim`) correctly reflect the embeddings' size from CLIP and VAE. Adjust `vae_dim` calculation based on your VAE architecture.
+
+4. **Optimizers:**
+   - **Classifier Optimizer (`optimizer_cls`):** Optimizes only the classifier parameters.
+   - **Stable Diffusion Optimizer (`optimizer_sd`):** Optimizes the `unet` and `text_encoder` parameters. Fine-tuning VAE is optional and depends on your specific requirements.
+
+5. **Training Loop Enhancements:**
+   - **Batch Size:** Reduced to `4` due to high memory usage during fine-tuning. Adjust based on your GPU capacity.
+   - **Loss Computation:**
+     - **Diffusion Loss (`loss_unet`):** Uses Mean Squared Error (MSE) between predicted noise and actual noise. Adjust based on the loss function suitable for your diffusion model.
+     - **Classification Loss (`loss_cls`):** Cross-entropy loss for artist classification.
+     - **Combined Loss:** Sum of diffusion loss and classification loss. You can introduce weighting if necessary.
+   - **Mixed Precision Training:** Utilizes PyTorch's `GradScaler` and `autocast` for efficient mixed-precision training to speed up and reduce memory usage.
+   - **Gradients Zeroing:** Ensures that gradients are zeroed for both optimizers before the backward pass.
+
+6. **Saving Models:**
+   - **Classifier:** Saved using `safetensors`.
+   - **Stable Diffusion Components:** Saved separately using `save_pretrained` for easier reloading and reuse.
+
+7. **Uploading to Hugging Face Hub:**
+   - **Separate Repositories:** Created separate repositories for the classifier and the fine-tuned Stable Diffusion model.
+   - **Uploading:** Utilizes `upload_file` and `upload_folder` for uploading model files and directories.
+
+8. **Inference Functions:**
+   - **`generate_image_with_artist_reference`:** Generates an image based on a prompt and provides artist attribution.
+   - **`verify_external_image_enhanced`:** Verifies an external image against the classifier to provide artist similarity scores.
+
+9. **Example Usage:**
+   - Demonstrates how to generate an image with attribution and verify an external image.
+
+### **Important Considerations:**
+
+- **Computational Resources:** Fine-tuning Stable Diffusion is resource-intensive. Ensure you have access to high-memory GPUs (e.g., NVIDIA A100) and consider reducing model sizes or batch sizes if necessary.
+  
+- **Dataset Quality:** The quality and relevance of your dataset's text prompts significantly impact the fine-tuning outcome. Ensure that prompts accurately describe the images and are diverse enough to generalize well.
+
+- **Loss Balancing:** You might need to experiment with balancing the diffusion loss and classification loss, possibly introducing weights to prioritize one over the other based on your application needs.
+
+- **Saving Checkpoints:** For longer training sessions, implement checkpoint saving to prevent loss of progress in case of interruptions.
+
+- **Hyperparameter Tuning:** Experiment with different learning rates, batch sizes, and optimizer settings to achieve optimal performance.
+
+### **Final Notes:**
+
+Fine-tuning large models like Stable Diffusion requires careful handling to ensure both the generative capabilities and the classifier's accuracy are maintained and enhanced. The provided code serves as a foundational framework. Depending on your specific use case, further customization and optimization might be necessary.
+
+Feel free to reach out if you encounter any challenges or have further questions regarding this implementation!
