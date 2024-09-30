@@ -31,6 +31,12 @@ A **training pipeline** that allows a generative model like **Stable Diffusion**
 
 ---
 
+## Publication
+
+- We published our early website and first article, kindly check out this article named [Bridging Generative AI and Artistic Integrity: A New Era of Creative Collaboration](https://lawfuldiffusion.kreasof.my.id/article/bridging-generative-ai-and-artistic-integrity)
+
+---
+
 ## Future updates
 
 - Experimental implementation with [WikiArt Public dataset](https://huggingface.co/datasets/huggan/wikiart)
