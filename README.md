@@ -35,3 +35,9 @@ A **training pipeline** that allows a generative model like **Stable Diffusion**
 
 - Experimental implementation with [WikiArt Public dataset](https://huggingface.co/datasets/huggan/wikiart)
 - [FLUX.1-schnell](https://huggingface.co/black-forest-labs/FLUX.1-schnell) implementation rather than stable diffusion
+
+---
+
+## Important Notes
+
+> We are looking for research sponsor/investor. Please email Akbar2habibullah@gmail.com if you are interested in sponsoring this project.
