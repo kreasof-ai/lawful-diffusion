@@ -38,6 +38,7 @@ A **training pipeline** that allows a generative model like **Stable Diffusion**
 ## Publication
 
 - We published our early website and first article, kindly check out this article named [Bridging Generative AI and Artistic Integrity: A New Era of Creative Collaboration](https://lawfuldiffusion.kreasof.my.id/article/bridging-generative-ai-and-artistic-integrity)
+- We publish brief video explanation regarding the project [[Link]](https://youtu.be/rL8eNZdQ7Y4?si=b2VhYLZKBTrNedWV)
 
 ---
 
