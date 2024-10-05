@@ -32,8 +32,8 @@ clip_model.eval()
 
 # Define Transformation for VAE
 vae_transform = Compose([
-    Resize(512, interpolation=Image.BICUBIC),
-    CenterCrop(512),
+    Resize(1024, interpolation=Image.BICUBIC),
+    CenterCrop(1024),
     ToTensor(),
     Normalize([0.5], [0.5])
 ])
@@ -46,10 +46,9 @@ dataset = load_dataset(dataset_name, split='train')
 artist_names = dataset.unique('artist')
 num_classes = len(artist_names)
 
-
 # Determine input dimensions
 clip_dim = clip_model.config.projection_dim if hasattr(clip_model.config, 'projection_dim') else 512
-vae_dim = vae.config.latent_channels * vae.config.block_out_channels[-1]  # Adjust based on VAE architecture
+vae_dim = vae.config.latent_channels * 64 * 64  # Adjust based on VAE architecture
 input_dim = clip_dim + vae_dim
 
 # Load classifier

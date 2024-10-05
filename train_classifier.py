@@ -9,6 +9,7 @@ import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
 from sklearn.preprocessing import LabelEncoder
 import pickle
+from classifier import ArtistClassifier
 from datasets import load_dataset
 from safetensors.torch import save_file
 from huggingface_hub import HfApi
@@ -41,8 +42,8 @@ clip_model.eval()
 
 # Define Transformation for VAE
 vae_transform = Compose([
-    Resize(512, interpolation=Image.BICUBIC),
-    CenterCrop(512),
+    Resize(1024, interpolation=Image.BICUBIC),
+    CenterCrop(1024),
     ToTensor(),
     Normalize([0.5], [0.5])
 ])
@@ -127,26 +128,9 @@ train_dataloader = DataLoader(
     num_workers=num_workers
 )
 
-# Define the Classification Model
-class ArtistClassifier(nn.Module):
-    def __init__(self, input_dim, num_classes):
-        super(ArtistClassifier, self).__init__()
-        self.fc1 = nn.Linear(input_dim, 512)
-        self.fc2 = nn.Linear(512, 256)
-        self.fc3 = nn.Linear(256, num_classes)
-        self.dropout = nn.Dropout(0.3)
-
-    def forward(self, x):
-        x = F.relu(self.fc1(x))
-        x = self.dropout(x)
-        x = F.relu(self.fc2(x))
-        x = self.dropout(x)
-        logits = self.fc3(x)
-        return logits
-
 # Determine input dimensions
 clip_dim = clip_model.config.projection_dim if hasattr(clip_model.config, 'projection_dim') else 512
-vae_dim = vae.config.latent_channels * vae.config.block_out_channels[-1]  # Adjust based on VAE architecture
+vae_dim = vae.config.latent_channels * 64 * 64  # Adjust based on VAE architecture
 input_dim = clip_dim + vae_dim
 
 num_classes = len(artist_names)
