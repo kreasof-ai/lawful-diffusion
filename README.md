@@ -61,6 +61,7 @@ Notes:
 ## Future updates
 
 - Experimental implementation with [WikiArt Public dataset](https://huggingface.co/datasets/huggan/wikiart)
+- Integration with [Glaze](https://glaze.cs.uchicago.edu/) image cloaking algorithm for further protection of artists artwork.
 - ~~[FLUX.1-schnell](https://huggingface.co/black-forest-labs/FLUX.1-schnell) implementation rather than stable diffusion~~ (Completed)
 - ~~Use bigger ViT model such as [InternViT-6B](https://huggingface.co/OpenGVLab/InternViT-6B-448px-V1-5)~~ (completed)
 
