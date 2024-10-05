@@ -1,6 +1,6 @@
 import torch
 from diffusers import StableDiffusionPipeline
-from transformers import CLIPModel, CLIPProcessor
+from transformers import CLIPModel, CLIPProcessor, AutoModel, CLIPImageProcessor
 import pickle
 from datasets import load_dataset
 
@@ -27,6 +27,12 @@ clip_model = CLIPModel.from_pretrained(clip_model_id)
 clip_processor = CLIPProcessor.from_pretrained(clip_model_id)
 clip_model = clip_model.to(device)
 
+# Load InternVIT model for classifier
+vit_model_id = "OpenGVLab/InternViT-6B-448px-V1-5"
+vit_model = AutoModel.from_pretrained(vit_model_id, torch_dtype=torch.bfloat16 if torch.cuda.is_available() else torch.float32)
+vit_processor = CLIPImageProcessor.from_pretrained(vit_model_id)
+vit_model = vit_model.to(device)
+
 # Initialize Label Encoder and Save
 dataset_name = "huggan/wikiart"  # Replace with your Hugging Face dataset name
 dataset = load_dataset(dataset_name, split='train')
@@ -37,13 +43,13 @@ num_classes = len(artist_names)
 
 # Determine input dimensions
 clip_dim = clip_model.config.projection_dim if hasattr(clip_model.config, 'projection_dim') else 512
-vae_dim = vae.config.latent_channels * 64 * 64  # Adjust based on VAE architecture
-input_dim = clip_dim + vae_dim
+vit_dim = vit_model.config.hidden_size if hasattr(clip_model.config, 'hidden_size') else 512
+vae_dim = vae.config.latent_channels * 64 * 64 # Adjust based on VAE architecture and VAE transformation
+input_dim = clip_dim + vit_model + vae_dim
 
 # Load classifier
 model = ArtistClassifier(input_dim=input_dim, num_classes=num_classes).to(device)
 model.load_state_dict(torch.load("artist_classifier.safetensors"))
-model.eval()
 
 # Load label encoder
 with open("label_encoder.pkl", "rb") as f:
@@ -58,6 +64,8 @@ if __name__ == "__main__":
         model=model,
         clip_processor=clip_processor,
         clip_model=clip_model,
+        vit_processor=vit_processor,
+        vit_model=vit_model,
         vae=vae,
         label_encoder=label_encoder,
         device=device,
@@ -79,6 +87,8 @@ if __name__ == "__main__":
         model=model,
         clip_processor=clip_processor,
         clip_model=clip_model,
+        vit_processor=vit_processor,
+        vit_model=vit_model,
         vae=vae,
         device=device,
         label_encoder=label_encoder,

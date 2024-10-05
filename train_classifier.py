@@ -1,6 +1,6 @@
 import torch
 from diffusers import StableDiffusionPipeline
-from transformers import CLIPModel, CLIPProcessor
+from transformers import CLIPModel, CLIPProcessor, AutoModel, CLIPImageProcessor
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
@@ -32,17 +32,25 @@ tokenizer = sd_pipeline.tokenizer
 
 # Load CLIP model for classifier
 clip_model_id = "openai/clip-vit-base-patch32"
-clip_model = CLIPModel.from_pretrained(clip_model_id)
+clip_model = CLIPModel.from_pretrained(clip_model_id, torch_dtype=torch.float32)
 clip_processor = CLIPProcessor.from_pretrained(clip_model_id)
 clip_model = clip_model.to(device)
 
+# Load InternVIT model for classifier
+vit_model_id = "OpenGVLab/InternViT-6B-448px-V1-5"
+vit_model = AutoModel.from_pretrained(vit_model_id, torch_dtype=torch.bfloat16 if torch.cuda.is_available() else torch.float32)
+vit_processor = CLIPImageProcessor.from_pretrained(vit_model_id)
+vit_model = vit_model.to(device)
+
 # Define Custom Dataset using Hugging Face datasets
 class ArtistDataset(Dataset):
-    def __init__(self, dataset_name, split, tokenizer, clip_processor, clip_model, vae, label_encoder, max_length=77):
+    def __init__(self, dataset_name, split, tokenizer, clip_processor, clip_model, vit_processor, vit_model, vae, label_encoder, max_length=77):
         self.dataset = load_dataset(dataset_name, split=split)
         self.tokenizer = tokenizer
         self.clip_processor = clip_processor
         self.clip_model = clip_model
+        self.vit_processor = vit_processor,
+        self.vit_model = vit_model
         self.vae = vae
         self.label_encoder = label_encoder
         self.max_length = max_length
@@ -62,7 +70,7 @@ class ArtistDataset(Dataset):
         attention_mask = inputs.attention_mask.squeeze(0)
 
         # Get combined embedding for classifier
-        combined_emb = get_combined_embedding(image, self.clip_processor, self.clip_model, self.vae, device)
+        vae_emb, vit_emb = get_combined_embedding(image, self.clip_processor, self.clip_model, self.vit_processor, self.vit_model, self.vae, device)
 
         # Get label
         label = self.label_encoder.transform([artist])[0]
@@ -70,7 +78,8 @@ class ArtistDataset(Dataset):
         return {
             'input_ids': input_ids,
             'attention_mask': attention_mask,
-            'combined_emb': combined_emb.squeeze(0),
+            'vae_emb': vae_emb.squeeze(0),
+            'vit_emb': vit_emb.squeeze(0),
             'label': label
         }
 
@@ -99,6 +108,8 @@ train_dataset = ArtistDataset(
     tokenizer=tokenizer,
     clip_processor=clip_processor,
     clip_model=clip_model,
+    vit_processor=vit_processor,
+    vit_model=vit_model,
     vae=vae,
     label_encoder=label_encoder
 )
@@ -112,12 +123,13 @@ train_dataloader = DataLoader(
 
 # Determine input dimensions
 clip_dim = clip_model.config.projection_dim if hasattr(clip_model.config, 'projection_dim') else 512
-vae_dim = vae.config.latent_channels * 64 * 64  # Adjust based on VAE architecture
-input_dim = clip_dim + vae_dim
+vit_dim = vit_model.config.hidden_size if hasattr(clip_model.config, 'hidden_size') else 512
+
+vae_dim = vae.config.latent_channels * 64 * 64 # Adjust based on VAE architecture and VAE transformation
 
 num_classes = len(artist_names)
 
-model = ArtistClassifier(input_dim=input_dim, num_classes=num_classes).to(device)
+model = ArtistClassifier(vae_dim=vae_dim, vit_dim=(clip_dim + vit_dim), num_classes=num_classes).to(device)
 
 # Define Loss and Optimizer
 criterion_cls = nn.CrossEntropyLoss()
@@ -137,7 +149,8 @@ for epoch in range(num_epochs):
     for batch in train_dataloader:
         input_ids = batch['input_ids'].to(device)
         attention_mask = batch['attention_mask'].to(device)
-        combined_emb = batch['combined_emb'].to(device)
+        vae_emb = batch['vae_emb'].to(device)
+        vit_emb = batch['vit_emb'].to(device)
         label = batch['label'].to(device)
 
         # Zero the gradients
@@ -145,7 +158,7 @@ for epoch in range(num_epochs):
 
         with autocast():
             # Forward pass through classifier
-            logits = model(combined_emb)
+            logits = model(vae_emb, vit_emb)
             loss_cls = criterion_cls(logits, label)
 
             # Weight the losses as needed

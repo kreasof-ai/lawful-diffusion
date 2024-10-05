@@ -10,7 +10,16 @@ def get_clip_embedding(image, clip_processor, clip_model, device):
     with torch.no_grad():
         clip_features = clip_model.get_image_features(**inputs)
     clip_features = clip_features / clip_features.norm(p=2, dim=-1, keepdim=True)
+
     return clip_features.cpu()
+
+def get_vit_embedding(image, vit_processor, vit_model, device):
+    pixel_values = vit_processor(images=image, return_tensors='pt').to(device).pixel_values
+
+    with torch.no_grad():
+        vit_features = vit_model(pixel_values)
+
+    return vit_features.cpu()
 
 def get_vae_embedding(image, vae, device):
     # transform image size to 1024 * 1024
@@ -27,27 +36,30 @@ def get_vae_embedding(image, vae, device):
         vae_features = latent_dist.mean
     return vae_features.cpu()
 
-def get_combined_embedding(image, clip_processor, clip_model, vae, device):
+def get_combined_embedding(image, clip_processor, clip_model, vit_processor, vit_model, vae, device):
     clip_emb = get_clip_embedding(image, clip_processor, clip_model, device)
+    vit_emb = get_vit_embedding(image, vit_processor, vit_model, device)
     vae_emb = get_vae_embedding(image, vae, device)
-    combined_emb = torch.cat([clip_emb, vae_emb], dim=1)
-    return combined_emb
+    combined_emb = torch.cat([clip_emb, vit_emb], dim=1)
+    return vae_emb, combined_emb
 
 # Inference purposes
 
-def generate_image_with_artist_reference(prompt, sd_pipeline, model, clip_processor, clip_model, vae, label_encoder, device, top_k=3):
+def generate_image_with_artist_reference(prompt, sd_pipeline, model, clip_processor, clip_model, vit_processor, vit_model, vae, label_encoder, device, top_k=3):
     # Generate Image
     with torch.no_grad():
         with torch.autocast(device.type):
             generated_image = sd_pipeline(prompt).images[0]
 
     # Get combined embedding
-    combined_emb = get_combined_embedding(generated_image, clip_processor, clip_model, vae, device)
-    combined_emb_tensor = combined_emb.to(device)
+    vae_emb, vit_emb = get_combined_embedding(generated_image, clip_processor, clip_model, vit_processor, vit_model, vae, device)
+    
+    vit_emb_tensor = vit_emb.to(device)
+    vae_emb_tensor = vae_emb.to(device)
 
     # Predict artist labels
     with torch.no_grad():
-        logits = model(combined_emb_tensor.unsqueeze(0))
+        logits = model(vae_emb_tensor.unsqueeze(0), vit_emb_tensor.unsqueeze(0))
         probabilities = F.softmax(logits, dim=1)
         top_probs, top_labels = torch.topk(probabilities, top_k)
 
@@ -64,7 +76,7 @@ def generate_image_with_artist_reference(prompt, sd_pipeline, model, clip_proces
 
     return generated_image, attribution
 
-def verify_external_image_enhanced(image_path, model, clip_processor, clip_model, vae, device, label_encoder, top_k=5):
+def verify_external_image_enhanced(image_path, model, clip_processor, clip_model, vit_processor, vit_model, vae, device, label_encoder, top_k=5):
     try:
         image = Image.open(image_path).convert("RGB")
     except Exception as e:
@@ -72,12 +84,14 @@ def verify_external_image_enhanced(image_path, model, clip_processor, clip_model
         return None
 
     # Get combined embedding
-    combined_emb = get_combined_embedding(image, clip_processor, clip_model, vae, device)
-    combined_emb_tensor = combined_emb.to(device)
+    vae_emb, vit_emb = get_combined_embedding(image, clip_processor, clip_model, vit_processor, vit_model, vae, device)
+    
+    vit_emb_tensor = vit_emb.to(device)
+    vae_emb_tensor = vae_emb.to(device)
 
     # Predict artist labels
     with torch.no_grad():
-        logits = model(combined_emb_tensor.unsqueeze(0))
+        logits = model(vae_emb_tensor.unsqueeze(0), vit_emb_tensor.unsqueeze(0))
         probabilities = F.softmax(logits, dim=1)
         top_probs, top_labels = torch.topk(probabilities, top_k)
 

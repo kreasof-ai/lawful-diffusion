@@ -35,6 +35,21 @@ A **training pipeline** that allows a generative model like **Stable Diffusion**
 
 ---
 
+## How it works
+
+- We finetune generative model with new image datasets
+- We extract VAE embedding from the finetuned model regarding the image datasets
+- We extract ViT and CLIP embedding from pretrained model (CLIP and InternViT) regarding the image datasets
+- We collect embedding from both sources and stored in datasets
+- We train the classifier from collected embedding
+- The generative model and classifier trained separately (They're two different models but work in the same inference pipeline)
+
+Notes: 
+- ViT and CLIP parameter is freezed according to the image datasets, but the VAE checkpoint is updated.
+- Every image is transformed into 1024*1024 for input uniformity into the classifier 
+
+---
+
 ## Publication
 
 - We published our early website and first article, kindly check out this article named [Bridging Generative AI and Artistic Integrity: A New Era of Creative Collaboration](https://lawfuldiffusion.kreasof.my.id/article/bridging-generative-ai-and-artistic-integrity)
@@ -46,7 +61,7 @@ A **training pipeline** that allows a generative model like **Stable Diffusion**
 
 - Experimental implementation with [WikiArt Public dataset](https://huggingface.co/datasets/huggan/wikiart)
 - [FLUX.1-schnell](https://huggingface.co/black-forest-labs/FLUX.1-schnell) implementation rather than stable diffusion
-- Use bigger ViT model such as [InternViT-6B](https://huggingface.co/OpenGVLab/InternViT-6B-448px-V1-5)
+- ~~Use bigger ViT model such as [InternViT-6B](https://huggingface.co/OpenGVLab/InternViT-6B-448px-V1-5)~~ (completed)
 
 ---
 
