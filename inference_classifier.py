@@ -1,0 +1,107 @@
+import torch
+from diffusers import StableDiffusionPipeline
+from transformers import CLIPModel, CLIPProcessor
+from torchvision.transforms import Compose, Resize, CenterCrop, ToTensor, Normalize
+from PIL import Image
+import pickle
+from datasets import load_dataset
+
+from classifier import ArtistClassifier
+from utils import generate_image_with_artist_reference, verify_external_image_enhanced
+
+# Device configuration
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+# Load fine-tuned Stable Diffusion
+sd_model_id = "runwayml/stable-diffusion-v1-5"
+sd_pipeline = StableDiffusionPipeline.from_pretrained(
+  sd_model_id,
+  torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32
+)
+sd_pipeline.to(device)
+
+# Extract components
+vae = sd_pipeline.vae
+
+# Load CLIP model for classifier
+clip_model_id = "openai/clip-vit-base-patch32"
+clip_model = CLIPModel.from_pretrained(clip_model_id)
+clip_processor = CLIPProcessor.from_pretrained(clip_model_id)
+clip_model = clip_model.to(device)
+clip_model.eval()
+
+# Define Transformation for VAE
+vae_transform = Compose([
+    Resize(512, interpolation=Image.BICUBIC),
+    CenterCrop(512),
+    ToTensor(),
+    Normalize([0.5], [0.5])
+])
+
+# Initialize Label Encoder and Save
+dataset_name = "huggan/wikiart"  # Replace with your Hugging Face dataset name
+dataset = load_dataset(dataset_name, split='train')
+
+# Gather artist names
+artist_names = dataset.unique('artist')
+num_classes = len(artist_names)
+
+
+# Determine input dimensions
+clip_dim = clip_model.config.projection_dim if hasattr(clip_model.config, 'projection_dim') else 512
+vae_dim = vae.config.latent_channels * vae.config.block_out_channels[-1]  # Adjust based on VAE architecture
+input_dim = clip_dim + vae_dim
+
+# Load classifier
+model = ArtistClassifier(input_dim=input_dim, num_classes=num_classes).to(device)
+model.load_state_dict(torch.load("artist_classifier.safetensors"))
+model.eval()
+
+# Load label encoder
+with open("label_encoder.pkl", "rb") as f:
+  label_encoder = pickle.load(f)
+
+if __name__ == "__main__":
+    # Example Prompt
+    prompt = "A futuristic cityscape at sunset"
+    generated_image, attribution = generate_image_with_artist_reference(
+        prompt=prompt,
+        sd_pipeline=sd_pipeline,
+        model=model,
+        clip_processor=clip_processor,
+        clip_model=clip_model,
+        vae=vae,
+        vae_transform=vae_transform,
+        label_encoder=label_encoder,
+        device=device,
+        top_k=5
+    )
+
+    # Display the generated image
+    generated_image.show()
+
+    # Print attribution
+    print("\nAttribution:")
+    for idx, attrib in enumerate(attribution, 1):
+        print(f"{idx}. Artist: {attrib['artist']}, Probability: {attrib['probability']:.2f}")
+
+    # Example External Image Verification
+    external_image_path = "path_to_external_image.jpg"  # Replace with your image path
+    verification_report = verify_external_image_enhanced(
+        image_path=external_image_path,
+        model=model,
+        clip_processor=clip_processor,
+        clip_model=clip_model,
+        vae=vae,
+        vae_transform=vae_transform,
+        device=device,
+        label_encoder=label_encoder,
+        top_k=5
+    )
+
+    if verification_report:
+        print("\nVerification Report:")
+        for idx, report in enumerate(verification_report, 1):
+            print(f"{idx}. Artist: {report['artist']}, Probability: {report['probability']:.2f}")
+    else:
+        print("\nNo similar images found or error in processing.")
