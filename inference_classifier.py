@@ -1,5 +1,5 @@
 import torch
-from diffusers import StableDiffusionPipeline
+from diffusers import FluxPipeline
 from transformers import CLIPModel, CLIPProcessor, AutoModel, CLIPImageProcessor
 import pickle
 from datasets import load_dataset
@@ -10,19 +10,21 @@ from utils import generate_image_with_artist_reference, verify_external_image_en
 # Device configuration
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-# Load fine-tuned Stable Diffusion
-sd_model_id = "runwayml/stable-diffusion-v1-5"
-sd_pipeline = StableDiffusionPipeline.from_pretrained(
-  sd_model_id,
-  torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32
+# Load Pretrained Models
+flux_model_id = "black-forest-labs/FLUX.1-schnell"
+flux_pipeline = FluxPipeline.from_pretrained(
+    flux_model_id,
+    torch_dtype=torch.bfloat16
 )
-sd_pipeline.to(device)
 
-# Extract components
-vae = sd_pipeline.vae
+# Move components to device
+flux_pipeline.to(device)
+
+# Extract VAE components
+vae = flux_pipeline.vae
 
 # Load CLIP model for classifier
-clip_model_id = "openai/clip-vit-base-patch32"
+clip_model_id = "openai/clip-vit-large-patch14"
 clip_model = CLIPModel.from_pretrained(clip_model_id)
 clip_processor = CLIPProcessor.from_pretrained(clip_model_id)
 clip_model = clip_model.to(device)
@@ -60,7 +62,7 @@ if __name__ == "__main__":
     prompt = "A futuristic cityscape at sunset"
     generated_image, attribution = generate_image_with_artist_reference(
         prompt=prompt,
-        sd_pipeline=sd_pipeline,
+        flux_pipeline=flux_pipeline,
         model=model,
         clip_processor=clip_processor,
         clip_model=clip_model,

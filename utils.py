@@ -45,11 +45,11 @@ def get_combined_embedding(image, clip_processor, clip_model, vit_processor, vit
 
 # Inference purposes
 
-def generate_image_with_artist_reference(prompt, sd_pipeline, model, clip_processor, clip_model, vit_processor, vit_model, vae, label_encoder, device, top_k=3):
+def generate_image_with_artist_reference(prompt, flux_pipeline, model, clip_processor, clip_model, vit_processor, vit_model, vae, label_encoder, device, top_k=3):
     # Generate Image
     with torch.no_grad():
         with torch.autocast(device.type):
-            generated_image = sd_pipeline(prompt).images[0]
+            generated_image = flux_pipeline(prompt).images[0]
 
     # Get combined embedding
     vae_emb, vit_emb = get_combined_embedding(generated_image, clip_processor, clip_model, vit_processor, vit_model, vae, device)

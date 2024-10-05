@@ -1,5 +1,5 @@
 import torch
-from diffusers import StableDiffusionPipeline
+from diffusers import FluxPipeline
 from transformers import CLIPModel, CLIPProcessor, AutoModel, CLIPImageProcessor
 import torch.nn as nn
 import torch.optim as optim
@@ -18,20 +18,20 @@ from utils import get_combined_embedding
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Load Pretrained Models
-sd_model_id = "runwayml/stable-diffusion-v1-5"
-sd_pipeline = StableDiffusionPipeline.from_pretrained(
-    sd_model_id,
-    torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32
+flux_model_id = "black-forest-labs/FLUX.1-schnell"
+flux_pipeline = FluxPipeline.from_pretrained(
+    flux_model_id,
+    torch_dtype=torch.bfloat16
 )
-# Move components to device
-sd_pipeline.to(device)
 
-# Extract components for fine-tuning
-vae = sd_pipeline.vae
-tokenizer = sd_pipeline.tokenizer
+# Move components to device
+flux_pipeline.to(device)
+
+# Extract VAE components
+vae = flux_pipeline.vae
 
 # Load CLIP model for classifier
-clip_model_id = "openai/clip-vit-base-patch32"
+clip_model_id = "openai/clip-vit-large-patch14"
 clip_model = CLIPModel.from_pretrained(clip_model_id, torch_dtype=torch.float32)
 clip_processor = CLIPProcessor.from_pretrained(clip_model_id)
 clip_model = clip_model.to(device)
@@ -44,9 +44,8 @@ vit_model = vit_model.to(device)
 
 # Define Custom Dataset using Hugging Face datasets
 class ArtistDataset(Dataset):
-    def __init__(self, dataset_name, split, tokenizer, clip_processor, clip_model, vit_processor, vit_model, vae, label_encoder, max_length=77):
+    def __init__(self, dataset_name, split, clip_processor, clip_model, vit_processor, vit_model, vae, label_encoder, max_length=77):
         self.dataset = load_dataset(dataset_name, split=split)
-        self.tokenizer = tokenizer
         self.clip_processor = clip_processor
         self.clip_model = clip_model
         self.vit_processor = vit_processor,
@@ -62,12 +61,6 @@ class ArtistDataset(Dataset):
         item = self.dataset[idx]
         image = item['image']
         artist = item['artist']
-        prompt = item.get('text', f"Artwork by {artist}")  # Assuming 'text' field exists; else use default.
-
-        # Tokenize prompt
-        inputs = self.tokenizer(prompt, padding="max_length", truncation=True, max_length=self.max_length, return_tensors="pt")
-        input_ids = inputs.input_ids.squeeze(0)  # Shape: (max_length,)
-        attention_mask = inputs.attention_mask.squeeze(0)
 
         # Get combined embedding for classifier
         vae_emb, vit_emb = get_combined_embedding(image, self.clip_processor, self.clip_model, self.vit_processor, self.vit_model, self.vae, device)
@@ -76,8 +69,6 @@ class ArtistDataset(Dataset):
         label = self.label_encoder.transform([artist])[0]
 
         return {
-            'input_ids': input_ids,
-            'attention_mask': attention_mask,
             'vae_emb': vae_emb.squeeze(0),
             'vit_emb': vit_emb.squeeze(0),
             'label': label
@@ -105,7 +96,6 @@ num_workers = 4
 train_dataset = ArtistDataset(
     dataset_name=dataset_name,
     split='train',
-    tokenizer=tokenizer,
     clip_processor=clip_processor,
     clip_model=clip_model,
     vit_processor=vit_processor,
@@ -147,8 +137,6 @@ for epoch in range(num_epochs):
     model.train()
     total_loss_cls = 0
     for batch in train_dataloader:
-        input_ids = batch['input_ids'].to(device)
-        attention_mask = batch['attention_mask'].to(device)
         vae_emb = batch['vae_emb'].to(device)
         vit_emb = batch['vit_emb'].to(device)
         label = batch['label'].to(device)
