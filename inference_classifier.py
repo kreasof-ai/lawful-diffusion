@@ -1,8 +1,6 @@
 import torch
 from diffusers import StableDiffusionPipeline
 from transformers import CLIPModel, CLIPProcessor
-from torchvision.transforms import Compose, Resize, CenterCrop, ToTensor, Normalize
-from PIL import Image
 import pickle
 from datasets import load_dataset
 
@@ -28,15 +26,6 @@ clip_model_id = "openai/clip-vit-base-patch32"
 clip_model = CLIPModel.from_pretrained(clip_model_id)
 clip_processor = CLIPProcessor.from_pretrained(clip_model_id)
 clip_model = clip_model.to(device)
-clip_model.eval()
-
-# Define Transformation for VAE
-vae_transform = Compose([
-    Resize(1024, interpolation=Image.BICUBIC),
-    CenterCrop(1024),
-    ToTensor(),
-    Normalize([0.5], [0.5])
-])
 
 # Initialize Label Encoder and Save
 dataset_name = "huggan/wikiart"  # Replace with your Hugging Face dataset name
@@ -70,7 +59,6 @@ if __name__ == "__main__":
         clip_processor=clip_processor,
         clip_model=clip_model,
         vae=vae,
-        vae_transform=vae_transform,
         label_encoder=label_encoder,
         device=device,
         top_k=5
@@ -92,7 +80,6 @@ if __name__ == "__main__":
         clip_processor=clip_processor,
         clip_model=clip_model,
         vae=vae,
-        vae_transform=vae_transform,
         device=device,
         label_encoder=label_encoder,
         top_k=5

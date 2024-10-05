@@ -1,10 +1,7 @@
 import torch
 from diffusers import StableDiffusionPipeline
 from transformers import CLIPModel, CLIPProcessor
-from torchvision.transforms import Compose, Resize, CenterCrop, ToTensor, Normalize
-from PIL import Image
 import torch.nn as nn
-import torch.nn.functional as F
 import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
 from sklearn.preprocessing import LabelEncoder
@@ -38,25 +35,15 @@ clip_model_id = "openai/clip-vit-base-patch32"
 clip_model = CLIPModel.from_pretrained(clip_model_id)
 clip_processor = CLIPProcessor.from_pretrained(clip_model_id)
 clip_model = clip_model.to(device)
-clip_model.eval()
-
-# Define Transformation for VAE
-vae_transform = Compose([
-    Resize(1024, interpolation=Image.BICUBIC),
-    CenterCrop(1024),
-    ToTensor(),
-    Normalize([0.5], [0.5])
-])
 
 # Define Custom Dataset using Hugging Face datasets
 class ArtistDataset(Dataset):
-    def __init__(self, dataset_name, split, tokenizer, clip_processor, clip_model, vae, vae_transform, label_encoder, max_length=77):
+    def __init__(self, dataset_name, split, tokenizer, clip_processor, clip_model, vae, label_encoder, max_length=77):
         self.dataset = load_dataset(dataset_name, split=split)
         self.tokenizer = tokenizer
         self.clip_processor = clip_processor
         self.clip_model = clip_model
         self.vae = vae
-        self.vae_transform = vae_transform
         self.label_encoder = label_encoder
         self.max_length = max_length
 
@@ -75,18 +62,14 @@ class ArtistDataset(Dataset):
         attention_mask = inputs.attention_mask.squeeze(0)
 
         # Get combined embedding for classifier
-        combined_emb = get_combined_embedding(image, self.clip_processor, self.clip_model, self.vae, self.vae_transform, device)
+        combined_emb = get_combined_embedding(image, self.clip_processor, self.clip_model, self.vae, device)
 
         # Get label
         label = self.label_encoder.transform([artist])[0]
 
-        # Process image for diffusion model
-        image = self.vae_transform(image)
         return {
             'input_ids': input_ids,
             'attention_mask': attention_mask,
-            'pixel_values': image,
-            'labels': image,  # For diffusion models, labels are typically the same as pixel_values
             'combined_emb': combined_emb.squeeze(0),
             'label': label
         }
@@ -117,7 +100,6 @@ train_dataset = ArtistDataset(
     clip_processor=clip_processor,
     clip_model=clip_model,
     vae=vae,
-    vae_transform=vae_transform,
     label_encoder=label_encoder
 )
 
@@ -155,8 +137,6 @@ for epoch in range(num_epochs):
     for batch in train_dataloader:
         input_ids = batch['input_ids'].to(device)
         attention_mask = batch['attention_mask'].to(device)
-        pixel_values = batch['pixel_values'].to(device)
-        labels = batch['labels'].to(device)
         combined_emb = batch['combined_emb'].to(device)
         label = batch['label'].to(device)
 
@@ -164,11 +144,6 @@ for epoch in range(num_epochs):
         optimizer_cls.zero_grad()
 
         with autocast():
-            # Sample noise and add to images (for diffusion)
-            noise = torch.randn_like(pixel_values)
-            timesteps = torch.randint(0, 1000, (pixel_values.shape[0],), device=device).long()
-            noisy_images = noise.add_0(pixel_values)  # Placeholder for actual noise addition based on timesteps
-
             # Forward pass through classifier
             logits = model(combined_emb)
             loss_cls = criterion_cls(logits, label)
