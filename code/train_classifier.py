@@ -12,7 +12,7 @@ from safetensors.torch import save_file
 from huggingface_hub import HfApi
 from torch.cuda.amp import GradScaler, autocast
 
-from utils import get_combined_embedding
+from utils import assign_artist_to_code, find_nearest_nth_root_and_factors, generate_alphabet_sequence, generate_unique_code, get_combined_embedding
 
 # Device configuration
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -44,15 +44,17 @@ vit_model = vit_model.to(device)
 
 # Define Custom Dataset using Hugging Face datasets
 class ArtistDataset(Dataset):
-    def __init__(self, dataset_name, split, clip_processor, clip_model, vit_processor, vit_model, vae, label_encoder, max_length=77):
+    def __init__(self, dataset_name, split, clip_processor, clip_model, vit_processor, vit_model, vae, label_encoder_1, label_encoder_2, label_encoder_3, assigned_artists):
         self.dataset = load_dataset(dataset_name, split=split)
         self.clip_processor = clip_processor
         self.clip_model = clip_model
         self.vit_processor = vit_processor,
         self.vit_model = vit_model
         self.vae = vae
-        self.label_encoder = label_encoder
-        self.max_length = max_length
+        self.label_encoder_1 = label_encoder_1
+        self.label_encoder_2 = label_encoder_2
+        self.label_encoder_3 = label_encoder_3
+        self.assigned_artists = assigned_artists
 
     def __len__(self):
         return len(self.dataset)
@@ -61,17 +63,23 @@ class ArtistDataset(Dataset):
         item = self.dataset[idx]
         image = item['image']
         artist = item['artist']
+        unique_code = self.assigned_artists[artist]
+        codes = unique_code.split("-")
 
         # Get combined embedding for classifier
         vae_emb, vit_emb = get_combined_embedding(image, self.clip_processor, self.clip_model, self.vit_processor, self.vit_model, self.vae, device)
 
         # Get label
-        label = self.label_encoder.transform([artist])[0]
+        label_1 = self.label_encoder_1.transform([codes[0]])[0]
+        label_2 = self.label_encoder_2.transform([codes[1]])[0]
+        label_3 = self.label_encoder_3.transform([codes[2]])[0]
 
         return {
             'vae_emb': vae_emb.squeeze(0),
             'vit_emb': vit_emb.squeeze(0),
-            'label': label
+            'label_1': label_1,
+            'label_2': label_2,
+            'label_3': label_3,
         }
 
 # Initialize Label Encoder and Save
@@ -81,13 +89,32 @@ dataset = load_dataset(dataset_name, split='train')
 # Gather artist names
 artist_names = dataset.unique('artist')
 
+num_classes = len(artist_names)
+
+classes_factors = find_nearest_nth_root_and_factors(num_classes)
+classes_alphabet_sequence = generate_alphabet_sequence(classes_factors)
+classes_unique_code = generate_unique_code(classes_alphabet_sequence)
+assigned_artists = assign_artist_to_code(artist_names, classes_unique_code)
+
 # Initialize and fit LabelEncoder
-label_encoder = LabelEncoder()
-label_encoder.fit(artist_names)
+label_encoder_1 = LabelEncoder()
+label_encoder_1.fit(classes_alphabet_sequence[0])
+
+label_encoder_2 = LabelEncoder()
+label_encoder_2.fit(classes_alphabet_sequence[1])
+
+label_encoder_3 = LabelEncoder()
+label_encoder_3.fit(classes_alphabet_sequence[2])
 
 # Save LabelEncoder
-with open("label_encoder.pkl", "wb") as f:
-    pickle.dump(label_encoder, f)
+with open("label_encoder_1.pkl", "wb") as f:
+    pickle.dump(label_encoder_1, f)
+
+with open("label_encoder_2.pkl", "wb") as f:
+    pickle.dump(label_encoder_2, f)
+
+with open("label_encoder_3.pkl", "wb") as f:
+    pickle.dump(label_encoder_3, f)
 
 # Create Dataset and DataLoader
 batch_size = 16 
@@ -101,7 +128,10 @@ train_dataset = ArtistDataset(
     vit_processor=vit_processor,
     vit_model=vit_model,
     vae=vae,
-    label_encoder=label_encoder
+    label_encoder_1=label_encoder_1,
+    label_encoder_2=label_encoder_2,
+    label_encoder_3=label_encoder_3,
+    assigned_artists=assigned_artists
 )
 
 train_dataloader = DataLoader(
@@ -117,9 +147,7 @@ vit_dim = vit_model.config.hidden_size if hasattr(clip_model.config, 'hidden_siz
 
 vae_dim = vae.config.latent_channels * 64 * 64 # Adjust based on VAE architecture and VAE transformation
 
-num_classes = len(artist_names)
-
-model = ArtistClassifier(vae_dim=vae_dim, vit_dim=(clip_dim + vit_dim), num_classes=num_classes).to(device)
+model = ArtistClassifier(vae_dim=vae_dim, vit_dim=(clip_dim + vit_dim), classes_factors=classes_factors).to(device)
 
 # Define Loss and Optimizer
 criterion_cls = nn.CrossEntropyLoss()
@@ -139,25 +167,32 @@ for epoch in range(num_epochs):
     for batch in train_dataloader:
         vae_emb = batch['vae_emb'].to(device)
         vit_emb = batch['vit_emb'].to(device)
-        label = batch['label'].to(device)
+        label_1 = batch['label_1'].to(device)
+        label_2 = batch['label_2'].to(device)
+        label_3 = batch['label_3'].to(device)
 
         # Zero the gradients
         optimizer_cls.zero_grad()
 
         with autocast():
             # Forward pass through classifier
-            logits = model(vae_emb, vit_emb)
-            loss_cls = criterion_cls(logits, label)
+            logits_1, logits_2, logits_3 = model(vae_emb, vit_emb)
+
+            loss_cls_1 = criterion_cls(logits_1, label_1)
+            loss_cls_2 = criterion_cls(logits_2, label_2)
+            loss_cls_3 = criterion_cls(logits_3, label_3)
 
             # Weight the losses as needed
-            total_loss = loss_cls
+            total_loss = loss_cls_1 + loss_cls_2 + loss_cls_3
 
         # Backpropagation with mixed precision
         scaler.scale(total_loss).backward()
         scaler.step(optimizer_cls)
         scaler.update()
 
-        total_loss_cls += loss_cls.item()
+        total_loss_cls += loss_cls_1.item()
+        total_loss_cls += loss_cls_2.item()
+        total_loss_cls += loss_cls_3.item()
 
     avg_loss_cls = total_loss_cls / len(train_dataloader)
     print(f"Epoch [{epoch+1}/{num_epochs}], Loss Classifier: {avg_loss_cls:.4f}")

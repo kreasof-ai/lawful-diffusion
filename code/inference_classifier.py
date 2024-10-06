@@ -5,7 +5,7 @@ import pickle
 from datasets import load_dataset
 
 from classifier import ArtistClassifier
-from utils import generate_image_with_artist_reference, verify_external_image_enhanced
+from utils import assign_code_to_artists, find_nearest_nth_root_and_factors, generate_alphabet_sequence, generate_image_with_artist_reference, generate_unique_code, verify_external_image_enhanced
 
 # Device configuration
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -43,6 +43,11 @@ dataset = load_dataset(dataset_name, split='train')
 artist_names = dataset.unique('artist')
 num_classes = len(artist_names)
 
+classes_factors = find_nearest_nth_root_and_factors(num_classes)
+classes_alphabet_sequence = generate_alphabet_sequence(classes_factors)
+classes_unique_code = generate_unique_code(classes_alphabet_sequence)
+assigned_codes = assign_code_to_artists(artist_names, classes_unique_code, classes_alphabet_sequence)
+
 # Determine input dimensions
 clip_dim = clip_model.config.projection_dim if hasattr(clip_model.config, 'projection_dim') else 512
 vit_dim = vit_model.config.hidden_size if hasattr(clip_model.config, 'hidden_size') else 512
@@ -50,12 +55,18 @@ vae_dim = vae.config.latent_channels * 64 * 64 # Adjust based on VAE architectur
 input_dim = clip_dim + vit_model + vae_dim
 
 # Load classifier
-model = ArtistClassifier(input_dim=input_dim, num_classes=num_classes).to(device)
+model = ArtistClassifier(input_dim=input_dim, classes_factors=classes_factors).to(device)
 model.load_state_dict(torch.load("artist_classifier.safetensors"))
 
 # Load label encoder
-with open("label_encoder.pkl", "rb") as f:
-  label_encoder = pickle.load(f)
+with open("label_encoder_1.pkl", "wb") as f:
+    label_encoder_1 = pickle.load(f)
+
+with open("label_encoder_2.pkl", "wb") as f:
+    label_encoder_2 = pickle.load(f)
+
+with open("label_encoder_3.pkl", "wb") as f:
+    label_encoder_3 = pickle.load(f)
 
 if __name__ == "__main__":
     # Example Prompt
@@ -69,9 +80,12 @@ if __name__ == "__main__":
         vit_processor=vit_processor,
         vit_model=vit_model,
         vae=vae,
-        label_encoder=label_encoder,
+        label_encoder_1=label_encoder_1,
+        label_encoder_2=label_encoder_2,
+        label_encoder_3=label_encoder_3,
+        assigned_codes=assigned_codes,
         device=device,
-        top_k=5
+        artist_names=artist_names,
     )
 
     # Display the generated image
@@ -93,8 +107,11 @@ if __name__ == "__main__":
         vit_model=vit_model,
         vae=vae,
         device=device,
-        label_encoder=label_encoder,
-        top_k=5
+        label_encoder_1=label_encoder_1,
+        label_encoder_2=label_encoder_2,
+        label_encoder_3=label_encoder_3,
+        assigned_codes=assigned_codes,
+        artist_names=artist_names,
     )
 
     if verification_report:
