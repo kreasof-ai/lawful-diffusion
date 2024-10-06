@@ -3,6 +3,7 @@
 ---
 
 # Lawful Diffusion
+[Website](https://www.lawfuldiffusion.my.id/) | [Email](mailto:akbar2habibullah@gmail.com) | [Docs (soon)](#)
 
 This implementation provides a comprehensive framework for integrating ~~**Stable Diffusion**~~ **FLUX Model** with a **retrieval-based attribution system** using **PyTorch**, **Hugging Face's Diffusers**, **CLIP**, and **InternViT**. By encoding and indexing the training dataset's images, the system can both attribute generated images and verify external images against the training data.
 
@@ -43,6 +44,7 @@ A **training pipeline** that allows a generative model like **FLUX Model** to **
 - We extract ViT and CLIP embedding from pretrained model (CLIP and InternViT) regarding the image datasets
 - We collect embedding from both sources and stored in datasets
 - We train the classifier from collected embedding
+- The classiffier have multiple output heads, to easily scale with many artists label in the future.
 - The generative model and classifier trained separately (They're two different models but work in the same inference pipeline)
 
 Notes: 

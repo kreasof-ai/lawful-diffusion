@@ -18,7 +18,7 @@ from utils import assign_artist_to_code, find_nearest_nth_root_and_factors, gene
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Load Pretrained Models
-flux_model_id = "black-forest-labs/FLUX.1-schnell"
+flux_model_id = "ostris/OpenFLUX.1"
 flux_pipeline = FluxPipeline.from_pretrained(
     flux_model_id,
     torch_dtype=torch.bfloat16
