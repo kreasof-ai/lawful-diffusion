@@ -48,7 +48,7 @@ A **training pipeline** that allows a generative model like **FLUX Model** to **
 Notes: 
 - ViT and CLIP parameter is freezed according to the image datasets, but the VAE checkpoint is updated.
 - Every image is transformed into 1024*1024 for input uniformity into the classifier 
-- Total parameter count (if we are using FLUX model and 1024*1024 image size transformation): 1,106,898,944 (1.1 Billions)
+- Total parameter count (if we are using FLUX model, 1024*1024 image size transformation, and 1,000,000 number of artists): 688595244~ (688M Parameters, exclude the pretrained and FLUX models)
 
 ---
 
