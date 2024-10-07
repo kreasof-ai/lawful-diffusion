@@ -137,11 +137,11 @@ def assign_artists_to_code(artist_names, unique_code):
 
 # Inference purposes
 
-def generate_image_with_artist_reference(prompt, flux_pipeline, model, clip_processor, clip_model, vit_processor, vit_model, vae, label_encoder_1, label_encoder_2, label_encoder_3, assigned_codes, device, artist_names):
+def generate_image_with_artist_reference(prompt, pipeline, model, clip_processor, clip_model, vit_processor, vit_model, vae, label_encoder_1, label_encoder_2, label_encoder_3, assigned_codes, device, artist_names):
     # Generate Image
     with torch.no_grad():
         with torch.autocast(device.type):
-            generated_image = flux_pipeline(prompt).images[0]
+            generated_image = pipeline(prompt).images[0]
 
     # Get combined embedding
     vae_emb, vit_emb = get_combined_embedding(generated_image, clip_processor, clip_model, vit_processor, vit_model, vae, device)

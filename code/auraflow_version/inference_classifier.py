@@ -11,7 +11,7 @@ from utils import assign_code_to_artists, find_nearest_nth_root_and_factors, gen
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Load Pretrained Models
-model_id = "ostris/OpenFLUX.1"
+model_id = "fal/AuraFlow-v0.3"
 pipeline = FluxPipeline.from_pretrained(
     model_id,
     torch_dtype=torch.bfloat16
