@@ -64,7 +64,8 @@ Notes:
 ## Future updates
 
 - Experimental implementation with [WikiArt Public dataset](https://huggingface.co/datasets/huggan/wikiart)
-- Integration with [Glaze](https://glaze.cs.uchicago.edu/) image cloaking algorithm for further protection of artists artwork.
+- Integration with [Glaze](https://glaze.cs.uchicago.edu/) image cloaking algorithm for further protection of artists' artwork.
+- Add [AuraFlow](https://huggingface.co/fal/AuraFlow-v0.3) variant, because FLUX-schnell is distilled model and FLUX-dev is not included with commercial license.
 - ~~[FLUX.1-schnell](https://huggingface.co/black-forest-labs/FLUX.1-schnell) implementation rather than stable diffusion~~ (completed)
 - ~~Use bigger ViT model such as [InternViT-6B](https://huggingface.co/OpenGVLab/InternViT-6B-448px-V1-5)~~ (completed)
 
