@@ -1,5 +1,5 @@
 import torch
-from diffusers import FluxPipeline
+from diffusers import AuraFlowPipeline
 from transformers import CLIPModel, CLIPProcessor, AutoModel, CLIPImageProcessor
 import pickle
 from datasets import load_dataset
@@ -12,7 +12,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Load Pretrained Models
 model_id = "fal/AuraFlow-v0.3"
-pipeline = FluxPipeline.from_pretrained(
+pipeline = AuraFlowPipeline.from_pretrained(
     model_id,
     torch_dtype=torch.bfloat16
 )

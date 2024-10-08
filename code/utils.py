@@ -228,25 +228,25 @@ def verify_external_image_enhanced(image_path, model, clip_processor, clip_model
     # Prepare verification report
     table = {}
     for i in range(len(artist_names)):
-        table[artist_names[i]] = 0
+        table[artist_names[i]] = 1
 
     for i in range(len(predicted_label_1)):
         artist_lists = assigned_codes['code_1'][predicted_label_1[i]]
 
         for j in range(len(artist_lists)):
-            table[artist_lists[j]] += top_probs_1[0][i].item()
+            table[artist_lists[j]] *= top_probs_1[0][i].item()
 
     for i in range(len(predicted_label_2)):
         artist_lists = assigned_codes['code_2'][predicted_label_2[i]]
 
         for j in range(len(artist_lists)):
-            table[artist_lists[j]] += top_probs_2[0][i].item()
+            table[artist_lists[j]] *= top_probs_2[0][i].item()
 
     for i in range(len(predicted_label_3)):
         artist_lists = assigned_codes['code_3'][predicted_label_3[i]]
 
         for j in range(len(artist_lists)):
-            table[artist_lists[j]] += top_probs_3[0][i].item()
+            table[artist_lists[j]] *= top_probs_3[0][i].item()
     
     sorted_table = sorted(table.items(), key=lambda item: item[1])
     
